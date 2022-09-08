@@ -834,6 +834,13 @@ int disp_al_lcd_cfg(u32 screen_id, struct disp_panel_para *panel,
 
 	tcon_init(screen_id);
 	disp_al_lcd_get_clk_info(screen_id, &info, panel);
+
+	if (panel->tcon_clk_div_ajust.clk_div_increase_or_decrease == INCREASE) {
+		info.tcon_div = info.tcon_div * panel->tcon_clk_div_ajust.div_multiple;
+	} else if (panel->tcon_clk_div_ajust.clk_div_increase_or_decrease == DECREASE) {
+		info.tcon_div = info.tcon_div / panel->tcon_clk_div_ajust.div_multiple;
+	}
+
 	tcon0_set_dclk_div(screen_id, info.tcon_div);
 
 #if !defined(TCON1_DRIVE_PANEL)

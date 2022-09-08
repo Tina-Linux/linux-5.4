@@ -747,6 +747,16 @@ struct disp_lcd_esd_info {
 	unsigned int rst_cnt;
 };
 
+enum div_flag {
+	 INCREASE        = 1,
+	 DECREASE        = -1,
+};
+
+struct clk_div_ajust {
+	enum div_flag clk_div_increase_or_decrease;
+	int div_multiple;
+};
+
 struct disp_panel_para {
 	enum disp_lcd_if lcd_if;
 
@@ -829,6 +839,7 @@ struct disp_panel_para {
 	unsigned int input_csc;/*not need to config for user*/
 	unsigned int lcd_gsensor_detect;
 	unsigned int lcd_hv_data_polarity;
+	struct clk_div_ajust tcon_clk_div_ajust;
 
 };
 

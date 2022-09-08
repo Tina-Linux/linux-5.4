@@ -654,6 +654,7 @@ OUT:
 static s32 lcd_clk_config(struct disp_device *lcd)
 {
 	struct disp_lcd_private_data *lcdp = disp_lcd_get_priv(lcd);
+	struct disp_panel_para *panel = &lcdp->panel_info;
 	struct lcd_clk_info clk_info;
 	unsigned long pll_rate = 297000000, lcd_rate = 33000000;
 	unsigned long dclk_rate = 33000000, dsi_rate = 0;	/* hz */
@@ -729,6 +730,17 @@ static s32 lcd_clk_config(struct disp_device *lcd)
 	dclk_rate_set = lcd_rate_set / clk_info.tcon_div;
 	if ((pll_rate_set != pll_rate) || (lcd_rate_set != lcd_rate)
 	    || (dclk_rate_set != dclk_rate)) {
+		/*  ajust the tcon_div to fix the real pll  */
+		if (pll_rate_set > pll_rate) {
+			panel->tcon_clk_div_ajust.clk_div_increase_or_decrease = INCREASE;
+			panel->tcon_clk_div_ajust.div_multiple = pll_rate_set / pll_rate;
+			dclk_rate_set /= panel->tcon_clk_div_ajust.div_multiple;
+		} else {
+			panel->tcon_clk_div_ajust.clk_div_increase_or_decrease = DECREASE;
+			panel->tcon_clk_div_ajust.div_multiple = pll_rate / pll_rate_set;
+			dclk_rate_set *= panel->tcon_clk_div_ajust.div_multiple;
+		}
+
 		DE_WRN
 		    ("disp %d, clk: pll(%ld),clk(%ld),dclk(%ld) dsi_rate(%ld)\n     clk real:pll(%ld),clk(%ld),dclk(%ld) dsi_rate(%ld)\n",
 		     lcd->disp, pll_rate, lcd_rate, dclk_rate, dsi_rate,
@@ -1075,9 +1087,9 @@ static s32 disp_lcd_speed_limit(struct disp_panel_para *panel, u32 *min_dclk,
 			break;
 		}
 	}
+OUT:
 #endif
 
-OUT:
 	/*unlimit */
 	return 0;
 }
