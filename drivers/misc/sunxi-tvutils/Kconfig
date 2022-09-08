@@ -1,0 +1,26 @@
+#
+# sunxi system information driver.
+#
+#
+config SUNXI_MIPSLOADER
+	bool "enable sunxi mips firmware loader driver"
+	depends on (ARCH_SUNXI)
+	default n
+	help
+	  Choose Y to enable sunxi mips firmware loader driver
+
+config SUNXI_TVUTILS
+	bool "enable sunxi tv subsystem utils driver"
+	depends on (ARCH_SUNXI)
+	default n
+	help
+	  Choose Y to enable sunxi tv subsystem utils driver
+
+config SUNXI_ARISC_RPM
+	bool "enable sunxi remote processor messaging driver for arisc"
+	depends on (ARCH_SUNXI)
+    depends on (RPMSG_SUNXI_AMP)
+	default n
+	help
+	  Choose Y to enable sunxi remote processor messaging driver for arisc
+

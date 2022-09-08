@@ -1,0 +1,24 @@
+config AIC_WLAN_SUPPORT
+	bool "AIC wireless Support"
+	default n
+	help
+	  This is support for aic wireless chip.
+
+choice
+	prompt "Enable Chip Interface"
+	depends on AIC_WLAN_SUPPORT
+	---help---
+		Enable Chip Interface.
+config AIC_INTF_SDIO
+		bool "SDIO interface support"
+		depends on AIC_WLAN_SUPPORT && MMC
+config AIC_INTF_USB
+		bool "USB interface support"
+		depends on AIC_WLAN_SUPPORT && USB
+endchoice
+
+if AIC_WLAN_SUPPORT
+source "drivers/net/wireless/aic8800/aic8800_fdrv/Kconfig"
+source "drivers/net/wireless/aic8800/aic8800_btlpm/Kconfig"
+source "drivers/net/wireless/aic8800/aic8800_btusb/Kconfig"
+endif

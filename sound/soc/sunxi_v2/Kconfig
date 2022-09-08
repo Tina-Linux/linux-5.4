@@ -1,0 +1,97 @@
+# common
+config SND_SOC_SUNXI_PCM
+	tristate
+
+config SND_SOC_SUNXI_MACH
+	tristate
+
+# internal codec
+config SND_SOC_SUNXI_SUN50IW9_CODEC
+	tristate
+
+# ahub temp
+config SND_SOC_SUNXI_AHUB_TMP
+	tristate
+
+
+# menu select
+menu "Allwinner Audio support"
+	depends on ARCH_SUNXI
+
+menu "Codec drivers"
+
+config SND_SOC_SUNXI_INTERNALCODEC
+	tristate "Allwinner INTERNAL CODEC support"
+	select SND_SOC_SUNXI_SUN50IW9_CODEC if ARCH_SUN50IW9
+	depends on ARCH_SUN50IW9
+	help
+	    Select Y or M to support INTERNAL CODEC Module in the Allwinner SoCs.
+
+config SND_SOC_SUNXI_DUMMYCODEC
+	tristate "Allwinner DUMMY CODEC support"
+	help
+	    Select Y or M to support DUMMY CODEC Module in the Allwinner SoCs.
+
+endmenu
+
+menu "Platform(Audio Interface) drivers"
+
+# aaudio
+config SND_SOC_SUNXI_AAUDIO
+	tristate "Allwinner AAUDIO support"
+	select REGMAP_MMIO
+	select SND_SOC_GENERIC_DMAENGINE_PCM
+	select SND_SOC_SUNXI_PCM
+	select SND_SOC_SUNXI_MACH
+	depends on ARCH_SUN50IW9
+	help
+	    Select Y or M to support AAUDIO Module in the Allwinner SoCs.
+
+# spdif
+config SND_SOC_SUNXI_SPDIF
+	tristate "Allwinner SPDIF Support"
+	select REGMAP_MMIO
+	select SND_SOC_GENERIC_DMAENGINE_PCM
+	select SND_SOC_SUNXI_PCM
+	select SND_SOC_SUNXI_MACH
+	depends on ARCH_SUN50IW9
+	help
+	    Select Y or M to support SPDIF Module in Allwinner SoCs.
+
+# dmic
+config SND_SOC_SUNXI_DMIC
+	tristate "Allwinner DMIC support"
+	select REGMAP_MMIO
+	select SND_SOC_GENERIC_DMAENGINE_PCM
+	select SND_SOC_SUNXI_PCM
+	select SND_SOC_SUNXI_MACH
+	depends on ARCH_SUN50IW9
+	help
+	    Select Y or M to support DMIC Module in Allwinner SoCs.
+
+# daudio
+config SND_SOC_SUNXI_DAUDIO
+	tristate "Allwinner DAUDIO Support"
+	select REGMAP_MMIO
+	select SND_SOC_GENERIC_DMAENGINE_PCM
+	select SND_SOC_SUNXI_PCM
+	select SND_SOC_SUNXI_MACH
+	depends on !ARCH_SUN50IW9
+	help
+	    Select Y or M to support I2S/PCM/TDM Module in Allwinner SoCs.
+
+# ahub
+config SND_SOC_SUNXI_AHUB
+	tristate "Allwinner AHUB Support"
+	select REGMAP_MMIO
+	select SND_SOC_GENERIC_DMAENGINE_PCM
+	select SND_SOC_SUNXI_PCM
+#	select SND_SOC_SUNXI_MACH
+	select SND_SOC_SUNXI_AHUB_TMP
+	depends on ARCH_SUN50IW9
+	help
+	    Select Y or M to support AHUB Module in Allwinner SoCs.
+
+endmenu
+
+endmenu
