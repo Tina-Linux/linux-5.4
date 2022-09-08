@@ -45,6 +45,8 @@ struct fb_info_t {
 	unsigned long wait_count[3];
 	struct fb_g2d_rot_t *fb_rot[FB_MAX];
 	int mem_cache_flag[SUNXI_FB_MAX];
+	struct work_struct free_wq;
+	bool wait_for_free[DISP_SCREEN_NUM];
 
 	int blank[3];
 	struct disp_ion_mem *mem[SUNXI_FB_MAX];
@@ -544,8 +546,7 @@ static int sunxi_fb_open(struct fb_info *info, int user)
 					if (!mgr->device->is_enabled(mgr->device)) {
 						if (mgr->device->enable)
 							mgr->device->enable(mgr->device);
-						mgr->set_layer_config(mgr, &g_fbi.config[sel],
-								      1);
+						mgr->set_layer_config(mgr, &g_fbi.config[sel], 1);
 						disp_delay_ms(20);
 					}
 				}
@@ -818,7 +819,7 @@ static int sunxi_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
 void DRV_disp_int_process(u32 sel)
 {
 	g_fbi.wait_count[sel]++;
-	wake_up_interruptible(&g_fbi.wait[sel]);
+	wake_up_interruptible_all(&g_fbi.wait[sel]);
 }
 
 static inline u32 convert_bitfield(int val, struct fb_bitfield *bf)
@@ -857,7 +858,6 @@ static int sunxi_fb_setcolreg(unsigned int regno, unsigned int red, unsigned int
 		ret = -EINVAL;
 		break;
 	}
-
 	return ret;
 }
 
@@ -1517,7 +1517,6 @@ static int Fb_copy_boot_fb(u32 sel, struct fb_info *info)
 		Fb_unmap_kernel(src_addr);
 		return -1;
 	}
-
 	src_cp_btyes = src_width * src_bpp >> 3;
 	src_addr_e = src_addr_b + src_stride * src_height;
 	for (; src_addr_b != src_addr_e; src_addr_b += src_stride) {
@@ -1525,9 +1524,9 @@ static int Fb_copy_boot_fb(u32 sel, struct fb_info *info)
 		dst_addr += dst_stride;
 	}
 	Fb_unmap_kernel(src_addr);
-
-	memblock_free((unsigned long)src_phy_addr, src_stride * fb_height);
-	free_reserved_area(__va(src_phy_addr), __va(src_phy_addr + PAGE_ALIGN(src_stride * fb_height)), 0x00, "logo buffer");
+	g_fbi.wait_for_free[sel] = true;
+	//memblock_free((unsigned long)src_phy_addr, src_stride * fb_height);
+	//free_reserved_area(__va(src_phy_addr), __va(src_phy_addr + PAGE_ALIGN(src_stride * fb_height)), 0x00, "logo buffer");
 	return 0;
 }
 
@@ -2049,7 +2048,6 @@ static s32 display_fb_request(u32 fb_id, struct disp_fb_create_info *fb_para)
 			    bsp_disp_get_screen_physical_width(sel);
 			info->var.height =
 			    bsp_disp_get_screen_physical_height(sel);
-
 			memset(&config, 0, sizeof(struct disp_layer_config));
 
 			config.channel = g_fbi.layer_hdl[fb_id][0];
@@ -2081,6 +2079,7 @@ static s32 display_fb_request(u32 fb_id, struct disp_fb_create_info *fb_para)
 					: fb_para->output_height;
 			} else
 #endif
+
 			{
 				config.info.screen_win.width =
 					(0 ==
@@ -2135,6 +2134,7 @@ static s32 display_fb_request(u32 fb_id, struct disp_fb_create_info *fb_para)
 						   dirty_rect);
 			}
 #endif
+
 #if defined(CONFIG_SUNXI_DISP2_FB_HW_ROTATION_SUPPORT)
 			g_fbi.fb_rot[fb_id] = fb_g2d_rot_create(info, fb_id, &config);
 			if (g_fbi.fb_rot[fb_id])
@@ -2153,6 +2153,7 @@ static s32 display_fb_request(u32 fb_id, struct disp_fb_create_info *fb_para)
 	g_fbi.fb_mode[fb_id] = fb_para->fb_mode;
 	memcpy(&g_fbi.fb_para[fb_id], fb_para,
 	       sizeof(struct disp_fb_create_info));
+
 OUT:
 	return ret;
 }
@@ -2269,6 +2270,65 @@ unsigned long fb_get_address_info(u32 fb_id, u32 phy_virt_flag)
 
 	/* get phy address */
 	return phy_addr;
+}
+
+static void fb_free_reserve_mem(struct work_struct *work)
+{
+	int i;
+	int ret;
+	unsigned long count;
+	char *boot_fb_str = NULL;
+	char *src_phy_addr = NULL;
+	int fb_height = 0;
+	int src_stride = 0;
+
+	enum {
+		    BOOT_FB_ADDR = 0,
+			BOOT_FB_WIDTH,
+			BOOT_FB_HEIGHT,
+			BOOT_FB_BPP,
+			BOOT_FB_STRIDE,
+			BOOT_FB_CROP_L,
+			BOOT_FB_CROP_T,
+			BOOT_FB_CROP_R,
+			BOOT_FB_CROP_B,
+	};
+
+	for (i = 0; i < DISP_SCREEN_NUM; i++) {
+		if (g_fbi.wait_for_free[i]) {
+			count = g_fbi.wait_count[i];
+			ret = wait_event_interruptible_timeout(g_fbi.wait[i], count != g_fbi.wait_count[i], msecs_to_jiffies(2000));
+			if (ret <= 0)
+				__wrn("[DISP] %s wait for sync timeout\n", __func__);
+		}
+	}
+	boot_fb_str = (char *)disp_boot_para_parse_str("boot_fb0");
+	for (i = 0;; ++i) {
+		char *p = strstr(boot_fb_str, ",");
+		if (p != NULL)
+			*p = '\0';
+		if (i == BOOT_FB_ADDR) {
+			ret = kstrtoul(boot_fb_str, 16, (unsigned long *)&src_phy_addr);
+			if (ret)
+				pr_warn("parse src_phy_addr fail!\n");
+		} else if (i == BOOT_FB_HEIGHT) {
+			ret = kstrtou32(boot_fb_str, 16, &fb_height);
+			if (ret)
+				pr_warn("parse src_height fail!\n");
+		} else if (i == BOOT_FB_STRIDE) {
+			ret = kstrtou32(boot_fb_str, 16, &src_stride);
+			if (ret)
+				pr_warn("parse src_stride fail!\n");
+		}
+		if (p == NULL)
+			break;
+		boot_fb_str = p + 1;
+	}
+	if (src_phy_addr && fb_height > 0 && src_stride > 0) {
+		pr_warn("free logo buffer src_phy_addr=0x%x  fb_height=%d  src_stride=%d\n", src_phy_addr, fb_height, src_stride);
+		memblock_free((unsigned long)src_phy_addr, src_stride * fb_height);
+		free_reserved_area(__va(src_phy_addr), __va(src_phy_addr + PAGE_ALIGN(src_stride * fb_height)), 0x00, "logo buffer");
+	}
 }
 
 s32 fb_init(struct platform_device *pdev)
@@ -2408,15 +2468,32 @@ s32 fb_init(struct platform_device *pdev)
 		for (i = 0; i < SUNXI_FB_MAX; i++)
 			register_framebuffer(g_fbi.fbinfo[i]);
 	}
-
+	if (!ret) {
+		for (i = 0; i < num_screens; i++) {
+			if (g_fbi.wait_for_free[i]) {
+				INIT_WORK(&g_fbi.free_wq, fb_free_reserve_mem);
+				schedule_work(&g_fbi.free_wq);
+				break;
+			}
+		}
+	}
 	return ret;
 }
 
 s32 fb_exit(void)
 {
 	unsigned int fb_id = 0;
+	bool canceled = false;
+	int i;
 
 	disp_unregister_sync_finish_proc(DRV_disp_int_process);
+	for (i = 0; i < DISP_SCREEN_NUM; i++) {
+		if (g_fbi.wait_for_free[i] && !canceled) {
+			cancel_work_sync(&g_fbi.free_wq);
+			canceled = true;
+		}
+	}
+
 	for (fb_id = 0; fb_id < SUNXI_FB_MAX; fb_id++) {
 		if (g_fbi.fbinfo[fb_id]) {
 			fb_dealloc_cmap(&g_fbi.fbinfo[fb_id]->cmap);
@@ -2429,4 +2506,3 @@ s32 fb_exit(void)
 
 	return 0;
 }
-
